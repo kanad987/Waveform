@@ -10,10 +10,14 @@ import {
   Volume2,
   AlertTriangle,
   ChevronDown,
+  GraduationCap,
+  LayoutGrid,
 } from 'lucide-react';
 import type { MidiDeviceOption } from '../utils/midiManager';
 
 interface HeaderProps {
+  viewMode: 'studio' | 'academy';
+  onViewModeChange: (view: 'studio' | 'academy') => void;
   inputMode: 'midi' | 'mic';
   onInputModeChange: (mode: 'midi' | 'mic') => void;
   isListening: boolean;
@@ -35,6 +39,8 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
+  viewMode,
+  onViewModeChange,
   inputMode,
   onInputModeChange,
   isListening,
@@ -75,7 +81,7 @@ export const Header: React.FC<HeaderProps> = ({
           gap: '0.75rem',
         }}
       >
-        {/* Main Row: Logo, Mode Selector, Master Action Buttons */}
+        {/* Main Row: Logo, Primary View Tabs, Mode Selector, Master Controls */}
         <div
           style={{
             display: 'flex',
@@ -120,7 +126,50 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* Mode Selector Tabs */}
+          {/* Primary View Switcher: Studio Analyzer vs Piano Academy */}
+          <div
+            role="tablist"
+            aria-label="Workspace View Mode"
+            style={{
+              display: 'flex',
+              background: 'rgba(255, 255, 255, 0.05)',
+              padding: '3px',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-subtle)',
+            }}
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewMode === 'studio'}
+              className={`btn btn-sm ${viewMode === 'studio' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => onViewModeChange('studio')}
+              style={{ border: 'none', padding: '0.4rem 0.85rem' }}
+            >
+              <LayoutGrid size={15} />
+              <span>Studio Analyzer</span>
+            </button>
+
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewMode === 'academy'}
+              className={`btn btn-sm ${viewMode === 'academy' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => onViewModeChange('academy')}
+              style={{
+                border: 'none',
+                padding: '0.4rem 0.85rem',
+                background: viewMode === 'academy' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : undefined,
+                color: viewMode === 'academy' ? '#000000' : undefined,
+                fontWeight: '700',
+              }}
+            >
+              <GraduationCap size={16} />
+              <span>Piano Academy</span>
+            </button>
+          </div>
+
+          {/* Input Source Mode Selector Tabs */}
           <div
             role="tablist"
             aria-label="Audio and MIDI Input Selector"
@@ -310,7 +359,9 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-            {inputMode === 'midi'
+            {viewMode === 'academy'
+              ? '🎓 Piano Academy: Play the requested keys to master each lesson.'
+              : inputMode === 'midi'
               ? 'Plug in USB piano keyboard and play.'
               : 'All audio processed client-side in browser. No data leaves your machine.'}
           </div>

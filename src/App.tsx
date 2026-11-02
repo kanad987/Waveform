@@ -8,6 +8,7 @@ import type { HistoryItem } from './components/ChordHistory';
 import { ChordHistory } from './components/ChordHistory';
 import { DemoController } from './components/DemoController';
 import { SettingsModal } from './components/SettingsModal';
+import { PianoAcademy } from './components/PianoAcademy';
 import { audioEngine } from './utils/audioAnalyzer';
 import type { AudioAnalysisFrame } from './utils/audioAnalyzer';
 import { midiManager } from './utils/midiManager';
@@ -19,6 +20,10 @@ import type { ActiveNoteInfo } from './utils/musicTheory';
 import { createActiveNote } from './utils/musicTheory';
 
 export function App() {
+  // View mode: 'studio' (full analyzer tools) or 'academy' (children's interactive piano curriculum)
+  const [viewMode, setViewMode] = useState<'studio' | 'academy'>('studio');
+  const [academyHintNotes, setAcademyHintNotes] = useState<number[]>([]);
+
   // Check MIDI support directly during initial state
   const [midiSupported] = useState<boolean>(() => midiManager.isSupported());
 
@@ -411,6 +416,11 @@ export function App() {
     <div className="app-container">
       {/* Studio Header & Transport Controls */}
       <Header
+        viewMode={viewMode}
+        onViewModeChange={(mode) => {
+          setViewMode(mode);
+          setAcademyHintNotes([]);
+        }}
         inputMode={inputMode}
         onInputModeChange={handleInputModeChange}
         isListening={isListening}
@@ -457,46 +467,58 @@ export function App() {
           onKeyRelease={handleKeyRelease}
           labelMode="active"
           onRangePreset={(start, end) => setPianoRange({ start, end })}
+          hintMidiNotes={academyHintNotes}
         />
 
-        {/* 3. Harmonic & Chord Detection Center (Fixed height, rock solid layout) */}
-        <ChordDisplay
-          chordResult={chordResult}
-          inputSource={inputMode}
-          isListening={isListening}
-        />
-
-        {/* 4. Studio Companion Rack: Frequency Spectrum + Quick Auditions */}
-        <div className="visualizers-grid">
-          <SpectrumVisualizer
-            frequencyData={visFrame.frequencyData}
-            sampleRate={audioEngine.getContext()?.sampleRate || 44100}
+        {/* 3. Conditional Mode: Piano Academy Curriculum or Studio Analyzer Rack */}
+        {viewMode === 'academy' ? (
+          <PianoAcademy
             activeNotes={activeNotes}
-            dominantFreq={dominantPitch}
-            isListening={isListening}
+            onPlayTargetChord={(notes) => handlePlayDemoChord(notes)}
+            onSetHintNotes={setAcademyHintNotes}
           />
+        ) : (
+          <>
+            {/* Harmonic & Chord Detection Center (Fixed height, rock solid layout) */}
+            <ChordDisplay
+              chordResult={chordResult}
+              inputSource={inputMode}
+              isListening={isListening}
+            />
 
-          <DemoController
-            onPlayDemoChord={handlePlayDemoChord}
-            onPlayDemoProgression={handlePlayDemoProgression}
-            isPlayingDemo={isPlayingDemo}
-            onStopDemo={handleStopDemo}
-          />
-        </div>
+            {/* Studio Companion Rack: Frequency Spectrum + Quick Auditions */}
+            <div className="visualizers-grid">
+              <SpectrumVisualizer
+                frequencyData={visFrame.frequencyData}
+                sampleRate={audioEngine.getContext()?.sampleRate || 44100}
+                activeNotes={activeNotes}
+                dominantFreq={dominantPitch}
+                isListening={isListening}
+              />
 
-        {/* 5. Progression & Chord Detection History Strip */}
-        <ChordHistory
-          history={history}
-          onClear={() => setHistory([])}
-          onPlayItem={(item) => {
-            if (item.candidate) {
-              const notes = item.candidate.formula.intervals.map(
-                (iv) => item.candidate!.rootPitchClass + iv + 60
-              );
-              handlePlayDemoChord(notes, item.chordName);
-            }
-          }}
-        />
+              <DemoController
+                onPlayDemoChord={handlePlayDemoChord}
+                onPlayDemoProgression={handlePlayDemoProgression}
+                isPlayingDemo={isPlayingDemo}
+                onStopDemo={handleStopDemo}
+              />
+            </div>
+
+            {/* Progression & Chord Detection History Strip */}
+            <ChordHistory
+              history={history}
+              onClear={() => setHistory([])}
+              onPlayItem={(item) => {
+                if (item.candidate) {
+                  const notes = item.candidate.formula.intervals.map(
+                    (iv) => item.candidate!.rootPitchClass + iv + 60
+                  );
+                  handlePlayDemoChord(notes, item.chordName);
+                }
+              }}
+            />
+          </>
+        )}
       </main>
 
       {/* Settings Modal */}

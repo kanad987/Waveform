@@ -11,6 +11,7 @@ interface PianoKeyboardProps {
   onKeyRelease?: (midiNote: number) => void;
   labelMode?: 'all' | 'active' | 'c-only';
   onRangePreset?: (start: number, end: number) => void;
+  hintMidiNotes?: number[];
 }
 
 export const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
@@ -22,6 +23,7 @@ export const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
   onKeyRelease,
   labelMode = 'active',
   onRangePreset,
+  hintMidiNotes = [],
 }) => {
   const keyboardScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -31,7 +33,7 @@ export const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
     activeNoteMap.set(n.midiNote, n);
   }
 
-  // Avoid scrollIntoView which causes erratic page shaking during mic input
+  const hintSet = new Set(hintMidiNotes);
 
   // Generate white keys and black keys in order
   const keys: Array<{ midi: number; isBlack: boolean; whiteIndex: number }> = [];
@@ -84,6 +86,11 @@ export const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
         <div className="studio-panel-title">
           <span style={{ fontSize: '1.1rem' }}>🎹</span>
           <span>Piano Keyboard ({endMidi - startMidi + 1} Keys)</span>
+          {hintMidiNotes.length > 0 && (
+            <span className="badge badge-amber" style={{ fontSize: '0.65rem' }}>
+              Hints Visible ({hintMidiNotes.length} Target Keys)
+            </span>
+          )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
@@ -158,11 +165,13 @@ export const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
           {whiteKeys.map((k) => {
             const activeInfo = activeNoteMap.get(k.midi);
             const isActive = !!activeInfo;
+            const isHint = hintSet.has(k.midi);
             const noteNameWithOctave = midiToNoteName(k.midi, { useFlats, includeOctave: true });
             const isCKey = k.midi % 12 === 0;
 
             const shouldShowLabel =
               isActive ||
+              isHint ||
               labelMode === 'all' ||
               (labelMode === 'c-only' && isCKey);
 
@@ -187,12 +196,20 @@ export const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
                   height: '150px',
                   background: isActive
                     ? 'linear-gradient(180deg, #38bdf8 0%, #0284c7 100%)'
+                    : isHint
+                    ? 'linear-gradient(180deg, #fef3c7 0%, #fde68a 85%, #fcd34d 100%)'
                     : 'linear-gradient(180deg, #f8fafc 0%, #e2e8f0 85%, #cbd5e1 100%)',
-                  border: '1px solid #475569',
+                  border: isActive
+                    ? '1px solid #38bdf8'
+                    : isHint
+                    ? '2px solid #f59e0b'
+                    : '1px solid #475569',
                   borderTop: 'none',
                   borderRadius: '0 0 5px 5px',
                   boxShadow: isActive
                     ? '0 0 20px rgba(56, 189, 248, 0.7), inset 0 -2px 6px rgba(0,0,0,0.4)'
+                    : isHint
+                    ? '0 0 16px rgba(245, 158, 11, 0.65), inset 0 -4px 6px rgba(245, 158, 11, 0.3)'
                     : 'inset 0 -6px 6px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.3)',
                   transform: isActive ? 'translateY(3px)' : 'none',
                   cursor: 'pointer',
@@ -204,9 +221,28 @@ export const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
                   alignItems: 'center',
                   paddingBottom: '8px',
                   zIndex: 1,
-                  transition: 'background 0.08s ease, transform 0.06s ease',
+                  transition: 'background 0.08s ease, transform 0.06s ease, border-color 0.1s ease',
                 }}
               >
+                {/* Target badge when hint is active */}
+                {isHint && !isActive && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: '8px',
+                      fontSize: '0.55rem',
+                      fontFamily: 'var(--font-mono)',
+                      fontWeight: '800',
+                      background: '#f59e0b',
+                      color: '#000000',
+                      padding: '1px 3px',
+                      borderRadius: '3px',
+                    }}
+                  >
+                    TARGET
+                  </span>
+                )}
+
                 {shouldShowLabel && (
                   <div
                     style={{
@@ -220,8 +256,14 @@ export const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
                       style={{
                         fontFamily: 'var(--font-mono)',
                         fontSize: isCKey ? '0.78rem' : '0.72rem',
-                        fontWeight: isCKey || isActive ? '800' : '600',
-                        color: isActive ? '#ffffff' : isCKey ? '#0284c7' : '#334155',
+                        fontWeight: isCKey || isActive || isHint ? '800' : '600',
+                        color: isActive
+                          ? '#ffffff'
+                          : isHint
+                          ? '#78350f'
+                          : isCKey
+                          ? '#0284c7'
+                          : '#334155',
                       }}
                     >
                       {noteNameWithOctave}
@@ -252,13 +294,12 @@ export const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
           {blackKeys.map((k) => {
             const activeInfo = activeNoteMap.get(k.midi);
             const isActive = !!activeInfo;
+            const isHint = hintSet.has(k.midi);
             const noteNameWithOctave = midiToNoteName(k.midi, { useFlats, includeOctave: true });
 
             // Calculate precise X coordinate relative to white keys
-            // Black key sits between whiteIndex and whiteIndex + 1
             const offsetLeft = (k.whiteIndex / whiteKeys.length) * 100;
-
-            const shouldShowLabel = isActive || labelMode === 'all';
+            const shouldShowLabel = isActive || isHint || labelMode === 'all';
 
             return (
               <button
@@ -281,12 +322,20 @@ export const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
                   height: '98px',
                   background: isActive
                     ? 'linear-gradient(180deg, #f59e0b 0%, #b45309 100%)'
+                    : isHint
+                    ? 'linear-gradient(180deg, #78350f 0%, #92400e 60%, #b45309 100%)'
                     : 'linear-gradient(180deg, #1e293b 0%, #0f172a 60%, #020617 100%)',
-                  border: isActive ? '1px solid #fde68a' : '1px solid #334155',
+                  border: isActive
+                    ? '1px solid #fde68a'
+                    : isHint
+                    ? '2px solid #fbbf24'
+                    : '1px solid #334155',
                   borderTop: 'none',
                   borderRadius: '0 0 4px 4px',
                   boxShadow: isActive
                     ? '0 0 18px rgba(245, 158, 11, 0.8), inset 0 2px 4px rgba(255,255,255,0.3)'
+                    : isHint
+                    ? '0 0 16px rgba(251, 191, 36, 0.75), inset 0 1px 3px rgba(255,255,255,0.3)'
                     : '0 4px 8px rgba(0,0,0,0.7), inset 0 1px 2px rgba(255,255,255,0.15)',
                   transform: isActive ? 'translateY(2px)' : 'none',
                   cursor: 'pointer',
@@ -298,16 +347,35 @@ export const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
                   alignItems: 'center',
                   paddingBottom: '6px',
                   zIndex: 2,
-                  transition: 'background 0.08s ease, transform 0.06s ease',
+                  transition: 'background 0.08s ease, transform 0.06s ease, border-color 0.1s ease',
                 }}
               >
+                {/* Hint target marker */}
+                {isHint && !isActive && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: '6px',
+                      fontSize: '0.5rem',
+                      fontFamily: 'var(--font-mono)',
+                      fontWeight: '800',
+                      background: '#fbbf24',
+                      color: '#000000',
+                      padding: '1px 2px',
+                      borderRadius: '2px',
+                    }}
+                  >
+                    ★
+                  </span>
+                )}
+
                 {shouldShowLabel && (
                   <span
                     style={{
                       fontFamily: 'var(--font-mono)',
                       fontSize: '0.62rem',
                       fontWeight: '700',
-                      color: isActive ? '#ffffff' : '#94a3b8',
+                      color: isActive ? '#ffffff' : isHint ? '#fde68a' : '#94a3b8',
                       lineHeight: 1,
                     }}
                   >
