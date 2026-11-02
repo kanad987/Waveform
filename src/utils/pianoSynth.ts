@@ -82,8 +82,8 @@ export class PianoSynthesizer {
       { mult: 6.0, amp: 0.04, decay: 0.25 },    // 6th harmonic
     ];
 
-    // High notes decay faster, bass notes sustain longer
-    const baseDecay = Math.max(0.6, 3.5 * Math.pow(0.96, midiNote - 36));
+    // High notes decay faster, bass notes sustain longer (natural concert grand decay)
+    const baseDecay = Math.max(1.8, 5.5 * Math.pow(0.97, midiNote - 36));
 
     // Attack time: piano hammer strike is very fast (2-5ms)
     const attackTime = 0.004;

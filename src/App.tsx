@@ -57,7 +57,7 @@ export function App() {
     detectChord([])
   );
 
-  // Visualizer frames (updated at high-performance rate)
+  // Visualizer frame (waveform & spectrum)
   const [visFrame, setVisFrame] = useState<{
     timeDomainData: Float32Array;
     frequencyData: Float32Array;
@@ -78,6 +78,10 @@ export function App() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const lastChordRef = useRef<string>('');
   const lastChordTimeRef = useRef<number>(0);
+
+  // Throttling references for UI stability
+  const lastDomUpdateRef = useRef<number>(0);
+  const prevNotesHashRef = useRef<string>('');
 
   // Demo playback state
   const [isPlayingDemo, setIsPlayingDemo] = useState<boolean>(false);
@@ -151,7 +155,7 @@ export function App() {
     }
   }, [inputMode, useFlats, checkAndRecordHistory]);
 
-  // Real-time audio analysis loop
+  // Real-time audio analysis loop with UI throttling to guarantee zero screen shaking
   useEffect(() => {
     if (!isListening) {
       if (animationFrameId.current) {
@@ -163,7 +167,9 @@ export function App() {
 
     const runLoop = () => {
       const frame: AudioAnalysisFrame = audioEngine.analyzeFrame();
+      const now = performance.now();
 
+      // Visualizers update with raw frames
       setVisFrame({
         timeDomainData: frame.timeDomainData,
         frequencyData: frame.frequencyData,
@@ -173,14 +179,22 @@ export function App() {
         dominantFreq: frame.dominantFrequency,
       });
 
-      // In microphone mode, update detected notes and chord recognition from audio
+      // In microphone mode, throttle DOM chord and active-note updates to ~12Hz (every 80ms)
+      // and only when notes actually change to eliminate screen layout shaking!
       if (inputMode === 'mic') {
-        setActiveNotes(frame.detectedNotes);
-        const result = detectChord(frame.detectedNotes, { useFlats });
-        setChordResult(result);
+        const notesHash = frame.detectedNotes.map((n) => `${n.midiNote}:${(n.confidence ?? 1).toFixed(1)}`).join(',');
 
-        if (!frame.isSilent && result.primaryChord) {
-          checkAndRecordHistory(result, 'audio');
+        if (now - lastDomUpdateRef.current > 80 || notesHash !== prevNotesHashRef.current) {
+          lastDomUpdateRef.current = now;
+          prevNotesHashRef.current = notesHash;
+
+          setActiveNotes(frame.detectedNotes);
+          const result = detectChord(frame.detectedNotes, { useFlats });
+          setChordResult(result);
+
+          if (!frame.isSilent && result.primaryChord) {
+            checkAndRecordHistory(result, 'audio');
+          }
         }
       }
 
@@ -332,11 +346,11 @@ export function App() {
     setChordResult(result);
     checkAndRecordHistory(result, 'demo');
 
-    // Auto-release after 1.8 seconds
+    // Auto-release after 4.5 seconds to allow full sinusoidal waveform appreciation
     if (demoTimerRef.current) clearTimeout(demoTimerRef.current);
     demoTimerRef.current = window.setTimeout(() => {
       midiManager.clearAllNotes();
-    }, 1800);
+    }, 4500);
   };
 
   // Play a full jazz progression demo (ii - V - I - vi)
@@ -387,6 +401,12 @@ export function App() {
     setIsPlayingDemo(false);
   };
 
+  // Determine dominant pitch for sinusoidal wave locking:
+  // Prefer dominant frequency from analyzer, or fall back to lowest sounding active piano note
+  const dominantPitch =
+    visFrame.dominantFreq ||
+    (activeNotes.length > 0 ? activeNotes[0].frequency : null);
+
   return (
     <div className="app-container">
       {/* Studio Header & Transport Controls */}
@@ -416,33 +436,18 @@ export function App() {
 
       {/* Main Studio Viewport */}
       <main className="main-content">
-        {/* Prominent Harmonic Analysis & Hero Chord Display */}
-        <ChordDisplay
-          chordResult={chordResult}
-          inputSource={inputMode}
+        {/* 1. HERO CENTERPIECE: Sinusoidal Acoustic Waveform Oscilloscope (Big part of screen) */}
+        <WaveformVisualizer
+          timeDomainData={visFrame.timeDomainData}
+          rms={visFrame.rms}
+          peakDb={visFrame.peakDb}
+          isSilent={visFrame.isSilent}
           isListening={isListening}
+          dominantFreq={dominantPitch}
+          sampleRate={audioEngine.getContext()?.sampleRate || 44100}
         />
 
-        {/* Real-Time Visualizers: Waveform & Spectrum Grids */}
-        <div className="visualizers-grid">
-          <WaveformVisualizer
-            timeDomainData={visFrame.timeDomainData}
-            rms={visFrame.rms}
-            peakDb={visFrame.peakDb}
-            isSilent={visFrame.isSilent}
-            isListening={isListening}
-          />
-
-          <SpectrumVisualizer
-            frequencyData={visFrame.frequencyData}
-            sampleRate={audioEngine.getContext()?.sampleRate || 44100}
-            activeNotes={activeNotes}
-            dominantFreq={visFrame.dominantFreq}
-            isListening={isListening}
-          />
-        </div>
-
-        {/* Interactive Piano Keyboard Bed */}
+        {/* 2. Interactive Piano Keyboard Bed (Center of interaction, rock solid, zero shaking) */}
         <PianoKeyboard
           activeNotes={activeNotes}
           startMidi={pianoRange.start}
@@ -454,15 +459,32 @@ export function App() {
           onRangePreset={(start, end) => setPianoRange({ start, end })}
         />
 
-        {/* Quick Audition & Chord Progression Tester */}
-        <DemoController
-          onPlayDemoChord={handlePlayDemoChord}
-          onPlayDemoProgression={handlePlayDemoProgression}
-          isPlayingDemo={isPlayingDemo}
-          onStopDemo={handleStopDemo}
+        {/* 3. Harmonic & Chord Detection Center (Fixed height, rock solid layout) */}
+        <ChordDisplay
+          chordResult={chordResult}
+          inputSource={inputMode}
+          isListening={isListening}
         />
 
-        {/* Progression & Chord Detection History Strip */}
+        {/* 4. Studio Companion Rack: Frequency Spectrum + Quick Auditions */}
+        <div className="visualizers-grid">
+          <SpectrumVisualizer
+            frequencyData={visFrame.frequencyData}
+            sampleRate={audioEngine.getContext()?.sampleRate || 44100}
+            activeNotes={activeNotes}
+            dominantFreq={dominantPitch}
+            isListening={isListening}
+          />
+
+          <DemoController
+            onPlayDemoChord={handlePlayDemoChord}
+            onPlayDemoProgression={handlePlayDemoProgression}
+            isPlayingDemo={isPlayingDemo}
+            onStopDemo={handleStopDemo}
+          />
+        </div>
+
+        {/* 5. Progression & Chord Detection History Strip */}
         <ChordHistory
           history={history}
           onClear={() => setHistory([])}

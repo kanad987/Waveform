@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef } from 'react';
 import type { ActiveNoteInfo } from '../utils/musicTheory';
 import { isBlackKey, midiToNoteName } from '../utils/musicTheory';
 
@@ -31,16 +31,7 @@ export const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
     activeNoteMap.set(n.midiNote, n);
   }
 
-  // Auto-scroll to center active notes if keyboard is scrolled off-screen
-  useEffect(() => {
-    if (activeNotes.length > 0 && keyboardScrollRef.current) {
-      const firstActive = activeNotes[0].midiNote;
-      const keyElement = document.getElementById(`piano-key-${firstActive}`);
-      if (keyElement) {
-        keyElement.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-      }
-    }
-  }, [activeNotes]);
+  // Avoid scrollIntoView which causes erratic page shaking during mic input
 
   // Generate white keys and black keys in order
   const keys: Array<{ midi: number; isBlack: boolean; whiteIndex: number }> = [];
